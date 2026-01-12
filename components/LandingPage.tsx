@@ -140,8 +140,8 @@ export default function LandingPage() {
                 <Image
                   src="/icon.png"
                   alt="Impostor Logo"
-                  width={120}
-                  height={120}
+                  width={90}
+                  height={90}
                   priority
                   className="rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.5)] 
                     ring-2 ring-indigo-500/30 
@@ -151,7 +151,7 @@ export default function LandingPage() {
             </div>
           </div>
           
-          <h1 className="text-5xl sm:text-6xl font-black tracking-tight mb-2">
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-2">
             <span className="bg-linear-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text drop-shadow-[0_0_25px_rgba(139,92,246,0.5)]">
               IMPOSTOR
             </span>
