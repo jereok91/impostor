@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import useSocket from "../lib/useSocket";
 import useGameStore from "../lib/useGameStore";
 import { useToast } from "../lib/useToast";
@@ -129,8 +130,29 @@ export default function LandingPage() {
       <div className="relative w-full max-w-md">
         {/* Logo / Título */}
         <div className="text-center mb-8">
+          {/* Logo con efecto de resplandor */}
+          <div className="flex justify-center mb-6">
+            <div className="relative animate-float">
+              {/* Efecto de resplandor de fondo */}
+              <div className="absolute inset-0 bg-indigo-500/30 rounded-2xl blur-xl scale-110" />
+              {/* Contenedor del logo */}
+              <div className="relative">
+                <Image
+                  src="/icon.png"
+                  alt="Impostor Logo"
+                  width={120}
+                  height={120}
+                  priority
+                  className="rounded-2xl shadow-[0_0_30px_rgba(99,102,241,0.5)] 
+                    ring-2 ring-indigo-500/30 
+                    transition-transform duration-300 hover:scale-105"
+                />
+              </div>
+            </div>
+          </div>
+          
           <h1 className="text-5xl sm:text-6xl font-black tracking-tight mb-2">
-            <span className="bg-linear-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text text-transparent drop-shadow-[0_0_25px_rgba(139,92,246,0.5)]">
+            <span className="bg-linear-to-r from-indigo-400 via-violet-400 to-purple-400 bg-clip-text drop-shadow-[0_0_25px_rgba(139,92,246,0.5)]">
               IMPOSTOR
             </span>
           </h1>
