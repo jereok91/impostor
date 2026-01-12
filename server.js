@@ -4,6 +4,7 @@ const next = require('next');
 const { Server: IOServer } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
 const GameManager = require('./src/server/gameManager');
+const { sanitizeError, createSafeCallback, validateRequired, validateId, USER_FRIENDLY_MESSAGES } = require('./src/server/errorHandler');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -42,8 +43,22 @@ app.prepare().then(() => {
 
     socket.on('create_room', async (payload, cb) => {
       console.log('create_room:', payload);
+      const safe = createSafeCallback(cb, 'create_room');
+      
+      // Validación de entrada
+      const validation = validateRequired(payload, ['nickname']);
+      if (!validation.valid) {
+        return safe.validationError('El nickname es requerido');
+      }
+      
       try {
         const { nickname, rounds = 3, impostors = 1, showHintToImpostor = true } = payload;
+        
+        // Validar nickname no vacío
+        if (nickname.trim().length === 0) {
+          return safe.validationError('El nickname no puede estar vacío');
+        }
+        
         const user = await prisma.user.create({ data: { nickname } });
         const code = generateRoomCode();
         const game = await prisma.gameSession.create({
@@ -78,28 +93,41 @@ app.prepare().then(() => {
         socket.data.playerId = player.id;
         socket.data.gameId = game.id;
 
-        cb({ ok: true, gameId: game.id, code, playerId: player.id, config: gm.getConfig() });
+        safe.success({ gameId: game.id, code, playerId: player.id, config: gm.getConfig() });
         io.to(game.id).emit('room_update', { 
           gameId: game.id, 
           players: [{ id: player.id, nickname, isHost: true }],
           config: gm.getConfig()
         });
       } catch (err) {
-        console.error('create_room error:', err);
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al crear la sala. Intenta de nuevo.');
       }
     });
 
     socket.on('join_room', async (payload, cb) => {
       console.log('join_room:', payload);
+      const safe = createSafeCallback(cb, 'join_room');
+      
+      // Validación de entrada
+      const validation = validateRequired(payload, ['code', 'nickname']);
+      if (!validation.valid) {
+        return safe.validationError('El código y el nickname son requeridos');
+      }
+      
       try {
         const { code, nickname } = payload;
+        
+        // Validaciones básicas
+        if (nickname.trim().length === 0) {
+          return safe.validationError('El nickname no puede estar vacío');
+        }
+        
         const game = await prisma.gameSession.findUnique({ where: { code } });
-        if (!game) return cb({ ok: false, error: 'Sala no encontrada' });
+        if (!game) return safe.validationError(USER_FRIENDLY_MESSAGES.ROOM_NOT_FOUND);
 
         // Si el juego ya empezó, no permitir nuevos jugadores
         if (game.status !== 'WAITING') {
-          return cb({ ok: false, error: 'La partida ya ha comenzado. Espera a que termine para unirte.' });
+          return safe.validationError('La partida ya ha comenzado. Espera a que termine para unirte.');
         }
 
         const user = await prisma.user.create({ data: { nickname } });
@@ -128,17 +156,24 @@ app.prepare().then(() => {
           select: { id: true, nickname: true, isHost: true, score: true }
         });
 
-        cb({ ok: true, gameId: game.id, code: game.code, playerId: player.id });
+        safe.success({ gameId: game.id, code: game.code, playerId: player.id });
         io.to(game.id).emit('room_update', { gameId: game.id, players: allPlayers });
       } catch (err) {
-        console.error('join_room error:', err);
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al unirse a la sala. Intenta de nuevo.');
       }
     });
 
     // Reconectar a una sala existente
     socket.on('rejoin_room', async (payload, cb) => {
       console.log('rejoin_room:', payload);
+      const safe = createSafeCallback(cb, 'rejoin_room');
+      
+      // Validación de entrada
+      const validation = validateRequired(payload, ['playerId', 'gameId', 'code']);
+      if (!validation.valid) {
+        return safe.validationError('Sesión inválida');
+      }
+      
       try {
         const { playerId, gameId, code } = payload;
         
@@ -149,13 +184,13 @@ app.prepare().then(() => {
         });
         
         if (!player || player.gameId !== gameId || player.game.code !== code) {
-          return cb({ ok: false, error: 'Sesión inválida' });
+          return safe.validationError('Sesión inválida');
         }
 
         // Verificar que el juego aún existe
         const game = player.game;
         if (!game) {
-          return cb({ ok: false, error: 'La sala ya no existe' });
+          return safe.validationError('La sala ya no existe');
         }
 
         // Unir al socket a la sala
@@ -205,8 +240,7 @@ app.prepare().then(() => {
 
         const config = gm.getConfig();
 
-        cb({ 
-          ok: true, 
+        safe.success({ 
           gameId: game.id, 
           code: game.code, 
           phase: game.status, // Usar status de la DB, enviarlo como "phase" al cliente
@@ -222,24 +256,31 @@ app.prepare().then(() => {
         io.to(game.id).emit('room_update', { gameId: game.id, players: allPlayers, config });
         console.log(`Player ${player.nickname} reconnected to room ${code} (status: ${game.status})`);
       } catch (err) {
-        console.error('rejoin_room error:', err);
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al reconectar. Intenta crear una nueva partida.');
       }
     });
 
     socket.on('start_game', async (payload, cb) => {
       console.log('start_game:', payload);
+      const safe = createSafeCallback(cb, 'start_game');
+      
       try {
         const { gameId } = payload;
+        
+        // Validación de entrada
+        if (!gameId) {
+          return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
+        }
+        
         const gm = games.get(gameId);
         if (!gm) {
           console.log('Game not found in memory:', gameId);
-          return cb({ ok: false, error: 'Game not found' });
+          return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
         }
         
         // Validar que tenemos el playerId
         if (!socket.data.playerId) {
-          return cb({ ok: false, error: 'Sesión no válida. Por favor recarga la página.' });
+          return safe.validationError('Sesión no válida. Por favor recarga la página.');
         }
         
         // Validar que el jugador que intenta iniciar es el anfitrión
@@ -248,69 +289,95 @@ app.prepare().then(() => {
           select: { isHost: true }
         });
         if (!currentPlayer?.isHost) {
-          return cb({ ok: false, error: 'Solo el anfitrión puede iniciar la partida' });
+          return safe.validationError('Solo el anfitrión puede iniciar la partida');
         }
         
         // Validar usando la lógica del GameManager
         const playerCount = await prisma.player.count({ where: { gameId } });
         const validation = gm.canStartGame(playerCount);
         if (!validation.canStart) {
-          return cb({ ok: false, error: validation.message });
+          return safe.validationError(validation.message);
         }
         
         await gm.startGame();
         console.log('Game started successfully');
-        cb({ ok: true });
+        safe.success();
       } catch (err) {
-        console.error('start_game error:', err);
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al iniciar la partida. Intenta de nuevo.');
       }
     });
 
     socket.on('send_clue', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'send_clue');
       const { gameId, clue } = payload;
+      
       const gm = games.get(gameId);
-      if (!gm) return cb({ ok: false, error: 'Game not found' });
+      if (!gm) return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
+      
+      if (!clue || clue.trim().length === 0) {
+        return safe.validationError('La pista no puede estar vacía');
+      }
+      
       try {
         await gm.submitClue(socket.data.playerId, clue);
-        cb({ ok: true });
+        safe.success();
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al enviar la pista. Intenta de nuevo.');
       }
     });
 
     // Endpoint para que el cliente pida su tarjeta
     socket.on('get_my_card', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'get_my_card');
       const { gameId, playerId } = payload;
       console.log('get_my_card:', payload);
+      
       const gm = games.get(gameId);
-      if (!gm) return cb({ ok: false, error: 'Game not found' });
+      if (!gm) return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
+      
+      if (!playerId) {
+        return safe.validationError(USER_FRIENDLY_MESSAGES.PLAYER_NOT_FOUND);
+      }
+      
       try {
         const card = await gm.getCardForPlayer(playerId);
         if (card) {
-          cb({ ok: true, card });
+          safe.success({ card });
         } else {
-          cb({ ok: false, error: 'Card not found' });
+          safe.validationError('Carta no encontrada');
         }
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al obtener la carta. Intenta de nuevo.');
       }
     });
 
     socket.on('submit_vote', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'submit_vote');
       const { gameId, votedForPlayerId } = payload;
+      
       const gm = games.get(gameId);
-      if (!gm) return cb({ ok: false, error: 'Game not found' });
+      if (!gm) return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
+      
+      if (!socket.data.playerId) {
+        return safe.validationError('Sesión no válida');
+      }
+      
+      if (!votedForPlayerId) {
+        return safe.validationError('Debes seleccionar a un jugador');
+      }
+      
       try {
         await gm.submitVote(socket.data.playerId, votedForPlayerId);
-        cb({ ok: true });
+        safe.success();
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al enviar el voto. Intenta de nuevo.');
       }
     });
 
     // Obtener packs de palabras disponibles
     socket.on('get_word_packs', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'get_word_packs');
+      
       try {
         const packs = await prisma.wordPack.findMany({
           select: {
@@ -323,20 +390,22 @@ app.prepare().then(() => {
         
         // Si no hay packs, devolver uno por defecto
         if (packs.length === 0) {
-          cb({ ok: true, packs: [{ id: 'default', name: 'Mix Aleatorio', category: 'General' }] });
+          safe.success({ packs: [{ id: 'default', name: 'Mix Aleatorio', category: 'General' }] });
         } else {
-          cb({ ok: true, packs });
+          safe.success({ packs });
         }
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al cargar las categorías');
       }
     });
 
     // Actualizar configuración del ciclo (solo host)
     socket.on('update_config', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'update_config');
       const { gameId, config } = payload;
+      
       const gm = games.get(gameId);
-      if (!gm) return cb({ ok: false, error: 'Game not found' });
+      if (!gm) return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
       
       try {
         // Validar que el jugador es el host
@@ -345,36 +414,40 @@ app.prepare().then(() => {
           select: { isHost: true }
         });
         if (!currentPlayer?.isHost) {
-          return cb({ ok: false, error: 'Solo el anfitrión puede cambiar la configuración' });
+          return safe.validationError('Solo el anfitrión puede cambiar la configuración');
         }
         
         const newConfig = gm.updateConfig(config);
-        cb({ ok: true, config: newConfig });
+        safe.success({ config: newConfig });
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al actualizar la configuración');
       }
     });
 
     // Obtener información de validación para iniciar
     socket.on('get_start_validation', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'get_start_validation');
       const { gameId } = payload;
+      
       const gm = games.get(gameId);
-      if (!gm) return cb({ ok: false, error: 'Game not found' });
+      if (!gm) return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
       
       try {
         const playerCount = await prisma.player.count({ where: { gameId } });
         const validation = gm.canStartGame(playerCount);
-        cb({ ok: true, ...validation, config: gm.getConfig() });
+        safe.success({ ...validation, config: gm.getConfig() });
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al validar la partida');
       }
     });
 
     // Reiniciar partida (solo host)
     socket.on('restart_match', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'restart_match');
       const { gameId } = payload;
+      
       const gm = games.get(gameId);
-      if (!gm) return cb({ ok: false, error: 'Game not found' });
+      if (!gm) return safe.validationError(USER_FRIENDLY_MESSAGES.GAME_NOT_FOUND);
       
       try {
         // Validar que el jugador es el host
@@ -383,23 +456,24 @@ app.prepare().then(() => {
           select: { isHost: true }
         });
         if (!currentPlayer?.isHost) {
-          return cb({ ok: false, error: 'Solo el anfitrión puede reiniciar la partida' });
+          return safe.validationError('Solo el anfitrión puede reiniciar la partida');
         }
         
         await gm.restartMatch();
-        cb({ ok: true });
+        safe.success();
       } catch (err) {
-        cb({ ok: false, error: err.message });
+        safe.error(err, 'Error al reiniciar la partida');
       }
     });
 
     // Salir de la sala voluntariamente
     socket.on('leave_room', async (payload, cb) => {
+      const safe = createSafeCallback(cb, 'leave_room');
       const { gameId } = payload;
       const playerId = socket.data.playerId;
       
       if (!playerId || !gameId) {
-        return cb?.({ ok: false, error: 'No session' });
+        return safe.validationError('Sesión no válida');
       }
 
       try {
@@ -456,10 +530,9 @@ app.prepare().then(() => {
         socket.data.playerId = null;
         socket.data.gameId = null;
 
-        cb?.({ ok: true });
+        safe.success();
       } catch (err) {
-        console.error('Error leaving room:', err);
-        cb?.({ ok: false, error: err.message });
+        safe.error(err, 'Error al salir de la sala');
       }
     });
 
@@ -551,12 +624,24 @@ app.prepare().then(() => {
                   console.log(`Game ${gameId} deleted - no players remaining`);
                 }
               } catch (err) {
-                console.error('Error in delayed disconnect cleanup:', err);
+                // Solo logueamos, no hay callback para enviar error al cliente en disconnect
+                console.error('[ERROR] disconnect cleanup:', {
+                  playerId,
+                  gameId,
+                  message: err?.message,
+                  code: err?.code
+                });
               }
             }, 5000); // 5 segundos de gracia para reconectar
           }
         } catch (err) {
-          console.error('Error handling disconnect:', err);
+          // Solo logueamos, no hay callback para enviar error al cliente
+          console.error('[ERROR] disconnect handler:', {
+            playerId,
+            gameId,
+            message: err?.message,
+            code: err?.code
+          });
         }
       }
     });
