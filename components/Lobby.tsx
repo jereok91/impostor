@@ -7,6 +7,7 @@ import useGameStore from "../lib/useGameStore";
 import { useToast } from "../lib/useToast";
 import PlayerCard from "./PlayerCard";
 import LeaveGameButton from "./LeaveGameButton";
+import GameSettingsForm from "./GameSettingsForm";
 
 export default function Lobby() {
   const router = useRouter();
@@ -265,30 +266,19 @@ export default function Lobby() {
       </div>
 
       {gameInfo.gameId && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-4">
           {isHost ? (
-            <>
-              {!canStartGame && (
-                <div className="p-3 bg-yellow-900/50 border border-yellow-500 rounded-lg text-yellow-300 text-sm text-center">
-                  ⚠️ Se necesitan mínimo {MIN_PLAYERS} jugadores para iniciar ({MIN_PLAYERS - players.length} más)
-                </div>
-              )}
-              <button 
-                className={`px-4 py-3 rounded-lg font-medium transition ${
-                  canStartGame 
-                    ? "bg-red-600 hover:bg-red-500 text-white" 
-                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
-                }`}
-                onClick={startGame}
-                disabled={!canStartGame}
-              >
-                {canStartGame ? "🎮 Iniciar partida" : `Esperando jugadores (${players.length}/${MIN_PLAYERS})`}
-              </button>
-            </>
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6">
+              <GameSettingsForm onStartGame={() => {
+                // El formulario ya maneja el start_game
+                console.log("Game starting...");
+              }} />
+            </div>
           ) : (
-            <div className="p-4 bg-violet-900/30 border border-violet-500/50 rounded-lg text-center">
-              <div className="text-violet-300 text-lg mb-1">⏳ Esperando al anfitrión...</div>
-              <div className="text-gray-400 text-sm">El anfitrión iniciará la partida cuando estén todos listos</div>
+            <div className="p-6 bg-violet-900/30 border border-violet-500/50 rounded-2xl text-center">
+              <div className="text-4xl mb-4">⏳</div>
+              <div className="text-violet-300 text-lg mb-2">Esperando al anfitrión...</div>
+              <div className="text-gray-400 text-sm">El anfitrión está configurando la partida</div>
             </div>
           )}
         </div>

@@ -23,7 +23,9 @@ class GameManager {
     this.config = {
       totalRounds: 3,      // Número de rondas por ciclo
       impostorsCount: 1,   // Número de impostores
-      showHintToImpostor: true
+      showHintToImpostor: true,
+      turnTime: 60,        // Segundos por turno (0 = sin límite)
+      wordPackId: null,    // ID del pack de palabras (null = aleatorio)
     };
     
     // Estado del ciclo actual
@@ -75,13 +77,19 @@ class GameManager {
     }
     
     if (newConfig.totalRounds !== undefined) {
-      this.config.totalRounds = Math.max(1, Math.min(10, newConfig.totalRounds));
+      this.config.totalRounds = Math.max(1, Math.min(5, newConfig.totalRounds));
     }
     if (newConfig.impostorsCount !== undefined) {
       this.config.impostorsCount = Math.max(1, Math.min(5, newConfig.impostorsCount));
     }
     if (newConfig.showHintToImpostor !== undefined) {
       this.config.showHintToImpostor = newConfig.showHintToImpostor;
+    }
+    if (newConfig.turnTime !== undefined) {
+      this.config.turnTime = Math.max(0, Math.min(300, newConfig.turnTime));
+    }
+    if (newConfig.wordPackId !== undefined) {
+      this.config.wordPackId = newConfig.wordPackId;
     }
     
     // Notificar a todos del cambio de configuración

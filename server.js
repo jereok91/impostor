@@ -309,6 +309,29 @@ app.prepare().then(() => {
       }
     });
 
+    // Obtener packs de palabras disponibles
+    socket.on('get_word_packs', async (payload, cb) => {
+      try {
+        const packs = await prisma.wordPack.findMany({
+          select: {
+            id: true,
+            name: true,
+            category: true,
+          },
+          orderBy: { name: 'asc' }
+        });
+        
+        // Si no hay packs, devolver uno por defecto
+        if (packs.length === 0) {
+          cb({ ok: true, packs: [{ id: 'default', name: 'Mix Aleatorio', category: 'General' }] });
+        } else {
+          cb({ ok: true, packs });
+        }
+      } catch (err) {
+        cb({ ok: false, error: err.message });
+      }
+    });
+
     // Actualizar configuración del ciclo (solo host)
     socket.on('update_config', async (payload, cb) => {
       const { gameId, config } = payload;
