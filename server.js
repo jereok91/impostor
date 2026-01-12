@@ -10,12 +10,18 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
+// TTL para salas inactivas (por defecto 10 minutos)
+const LOBBY_TIMEOUT_MS = parseInt(process.env.LOBBY_TIMEOUT_SECONDS || '600', 10) * 1000;
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 const prisma = new PrismaClient();
 
 // Map gameId -> GameManager instance (memory)
 const games = new Map();
+
+// Map gameId -> NodeJS.Timeout (timers de expiración de sala)
+const roomTimers = new Map();
 
 function generateRoomCode(length = 5) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -37,6 +43,77 @@ app.prepare().then(() => {
       methods: ['GET', 'POST'],
     },
   });
+
+  /**
+   * Inicia el temporizador de expiración para una sala
+   * @param {string} gameId - ID del juego
+   */
+  function startRoomTimer(gameId) {
+    // Cancelar timer existente si hay uno
+    clearRoomTimer(gameId);
+    
+    const timeoutMs = LOBBY_TIMEOUT_MS;
+    console.log(`[TTL] Starting ${timeoutMs / 1000}s timer for room ${gameId}`);
+    
+    const timer = setTimeout(async () => {
+      console.log(`[TTL] Room ${gameId} expired due to inactivity`);
+      await expireRoom(gameId);
+    }, timeoutMs);
+    
+    roomTimers.set(gameId, timer);
+  }
+
+  /**
+   * Cancela el temporizador de expiración de una sala
+   * @param {string} gameId - ID del juego
+   */
+  function clearRoomTimer(gameId) {
+    const timer = roomTimers.get(gameId);
+    if (timer) {
+      clearTimeout(timer);
+      roomTimers.delete(gameId);
+      console.log(`[TTL] Timer cleared for room ${gameId}`);
+    }
+  }
+
+  /**
+   * Expira una sala por inactividad
+   * @param {string} gameId - ID del juego
+   */
+  async function expireRoom(gameId) {
+    try {
+      // 1. Notificar a todos los sockets en la sala
+      io.to(gameId).emit('room_expired', { 
+        reason: 'La sala se cerró por inactividad.',
+        gameId 
+      });
+
+      // 2. Obtener todos los sockets en la sala y desconectarlos de la room
+      const sockets = await io.in(gameId).fetchSockets();
+      for (const s of sockets) {
+        s.leave(gameId);
+        s.data.gameId = null;
+        s.data.playerId = null;
+      }
+
+      // 3. Eliminar jugadores de la DB
+      await prisma.player.deleteMany({ where: { gameId } }).catch(() => {});
+
+      // 4. Actualizar estado del juego en DB (marcar como expirado/eliminado)
+      await prisma.gameSession.update({
+        where: { id: gameId },
+        data: { status: 'FINISHED' }
+      }).catch(() => {});
+
+      // 5. Limpiar memoria
+      games.delete(gameId);
+      roomTimers.delete(gameId);
+
+      console.log(`[TTL] Room ${gameId} cleaned up successfully`);
+    } catch (err) {
+      console.error(`[TTL] Error expiring room ${gameId}:`, err.message);
+    }
+  }
 
   io.on('connection', (socket) => {
     console.log('socket connected:', socket.id);
@@ -87,6 +164,9 @@ app.prepare().then(() => {
         });
         gm.addPlayer(player.id, socket.id);
         games.set(game.id, gm);
+
+        // Iniciar timer de expiración de sala
+        startRoomTimer(game.id);
 
         socket.join(game.id);
         socket.data.userId = user.id;
@@ -298,6 +378,9 @@ app.prepare().then(() => {
         if (!validation.canStart) {
           return safe.validationError(validation.message);
         }
+        
+        // Cancelar el timer de expiración ya que la partida va a comenzar
+        clearRoomTimer(gameId);
         
         await gm.startGame();
         console.log('Game started successfully');
@@ -619,6 +702,7 @@ app.prepare().then(() => {
                 
                 // Si no quedan jugadores, limpiar el GameManager y la sesión
                 if (remainingPlayers.length === 0) {
+                  clearRoomTimer(gameId);
                   games.delete(gameId);
                   await prisma.gameSession.delete({ where: { id: gameId } }).catch(() => {});
                   console.log(`Game ${gameId} deleted - no players remaining`);

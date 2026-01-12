@@ -25,10 +25,25 @@ export default function Lobby() {
 
   useEffect(() => {
     if (!socket) return;
-    // Los listeners globales están en page.tsx
-    // Aquí solo manejamos eventos específicos del lobby si es necesario
-    return () => {};
-  }, [socket]);
+
+    // Escuchar evento de sala expirada por inactividad
+    const handleRoomExpired = ({ reason }: { reason?: string }) => {
+      toast.error(reason || "La sala se cerró por inactividad");
+      // Limpiar estado del juego
+      setGameInfo({ gameId: "", code: "", phase: "WAITING", round: 0 });
+      setPlayers([]);
+      setMyPlayerId("");
+      setMyNickname("");
+      // Redirigir a la landing page
+      router.push("/");
+    };
+
+    socket.on("room_expired", handleRoomExpired);
+
+    return () => {
+      socket.off("room_expired", handleRoomExpired);
+    };
+  }, [socket, router, toast, setGameInfo, setPlayers, setMyPlayerId, setMyNickname]);
 
   function createRoom() {
     if (!socket || !nickname) return;
