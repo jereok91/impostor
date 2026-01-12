@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  IMPOSTOR
+  FRIEND
+}
+
+enum GameStatus {
+  WAITING
+  DEALING
+  CLUES
+  VOTING
+  ROUND_RESULT
+  GAME_OVER
+  FINISHED
+}
+
+model User {
+  id         String    @id @default(cuid())
+  nickname   String
+  createdAt  DateTime  @default(now())
+  players    Player[]
+  hostedGames GameSession[] // relation: games where this user is host
+}
+
+model GameSession {
+  id             String     @id @default(cuid())
+  code           String     @unique
+  hostId         String
+  host           User       @relation(fields: [hostId], references: [id])
+  status         GameStatus @default(WAITING)
+  roundsTotal    Int        @default(3)
+  currentRound   Int        @default(0)
+  impostorsCount Int        @default(1)
+  createdAt      DateTime   @default(now())
+  players        Player[]
+  rounds         GameRound[]
+}
+
+model Player {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  gameId       String
+  game         GameSession @relation(fields: [gameId], references: [id])
+  nickname     String
+  isHost       Boolean  @default(false)
+  role         Role?
+  score        Int      @default(0)
+  isConnected  Boolean  @default(true)
+  joinedAt     DateTime @default(now())
+  clues        Json?    // store clues per round: [{round:1, text:"..."}]
+  votesCast    Json?    // store votes per round: [{round:1, voteForPlayerId:"..."}]
+}
+
+model WordPack {
+  id        String   @id @default(cuid())
+  name      String
+  category  String
+  words     String[] // Postgres text[]
+  createdAt DateTime @default(now())
+}
+
+model GameRound {
+  id          String   @id @default(cuid())
+  gameId      String
+  game        GameSession @relation(fields: [gameId], references: [id])
+  roundNumber Int
+  secretWord  String?
+  category    String?
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  votes       Vote[]
+}
+
+model Vote {
+  id           String    @id @default(cuid())
+  roundId      String
+  round        GameRound @relation(fields: [roundId], references: [id])
+  voterId      String
+  votedForId   String
+  createdAt    DateTime  @default(now())
+}
