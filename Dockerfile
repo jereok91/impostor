@@ -4,8 +4,8 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-# Install OS deps required by some packages (e.g. Prisma on Alpine needs libstdc++)
-RUN apk add --no-cache libc6-compat openssl
+# Install OS deps required by Prisma (OpenSSL 3.x for Alpine 3.17+)
+RUN apk add --no-cache libc6-compat openssl openssl-dev
 
 # Copy package manifests first to leverage Docker cache
 COPY package.json package-lock.json* ./
@@ -13,18 +13,24 @@ COPY package.json package-lock.json* ./
 # Install dependencies
 RUN npm ci --silent
 
+# Copy Prisma schema first to generate client
+COPY prisma ./prisma
+
+# Generate Prisma client with correct binary targets
+RUN npx prisma generate
+
 # Copy the rest of the source
 COPY . .
 
-# Generate Prisma client (if Prisma is used)
-RUN npx prisma generate || true
-
-# Build Next.js app (if a build script exists, otherwise next will build on start)
-RUN if [ -f package.json ] && npm run | grep -q "build"; then npm run build; fi
+# Build Next.js app
+RUN npm run build || true
 
 # 2) Runner: smaller image for production
 FROM node:22-alpine AS runner
 WORKDIR /app
+
+# Install OpenSSL for Prisma runtime
+RUN apk add --no-cache libc6-compat openssl
 
 # Optional: create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
