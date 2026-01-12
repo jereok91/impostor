@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Lobby from "../components/Lobby";
+import LandingPage from "../components/LandingPage";
 import GameBoard from "../components/GameBoard";
 import useGameStore from "../lib/useGameStore";
 import useSocket from "../lib/useSocket";
@@ -49,8 +49,8 @@ export default function Home() {
   }, [socket, setGameInfo, setPlayers]);
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      {inGame ? <GameBoard /> : <Lobby />}
+    <div className="min-h-screen bg-slate-950">
+      {inGame ? <GameBoard /> : <LandingPage />}
     </div>
   );
 }
