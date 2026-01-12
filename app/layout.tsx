@@ -17,8 +17,8 @@ export const metadata: Metadata = {
   title: "Impostor Game",
   description: "Descubre quién miente antes de que sea tarde. Juego multijugador en tiempo real.",
   keywords: ["impostor", "juego", "multijugador", "party game", "deducción"],
-  authors: [{ name: "Impostor Team" }],
-  creator: "Impostor Team",
+  authors: [{ name: "Digitalgex" }],
+  creator: "Digitalgex Team",
   manifest: "/manifest.json",
   icons: {
     icon: [
