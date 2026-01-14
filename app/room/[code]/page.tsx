@@ -49,7 +49,13 @@ export default function RoomPage() {
           // Actualizar datos por si hay cambios
           setPlayers(res.players || []);
           if (res.phase) {
-            setGameInfo((prev: any) => ({ ...prev, phase: res.phase, round: res.round }));
+            setGameInfo((prev: any) => ({ 
+              ...prev, 
+              phase: res.phase, 
+              round: res.round,
+              createdAt: res.createdAt,
+              timeoutDuration: res.timeoutDuration
+            }));
           }
           // Si hay carta (juego en progreso), restaurarla
           if (res.card) {
@@ -94,7 +100,9 @@ export default function RoomPage() {
             code: res.code, 
             phase: res.phase, 
             round: res.round,
-            showHintToImpostor: res.showHintToImpostor
+            showHintToImpostor: res.showHintToImpostor,
+            createdAt: res.createdAt,
+            timeoutDuration: res.timeoutDuration
           });
           setPlayers(res.players || []);
           
@@ -181,7 +189,14 @@ export default function RoomPage() {
     
     socket.emit("join_room", { code: roomCode, nickname: nickname.trim() }, (res: any) => {
       if (res.ok) {
-        setGameInfo({ gameId: res.gameId, code: res.code, phase: "WAITING", round: 0 });
+        setGameInfo({ 
+          gameId: res.gameId, 
+          code: res.code, 
+          phase: "WAITING", 
+          round: 0,
+          createdAt: res.createdAt,
+          timeoutDuration: res.timeoutDuration
+        });
         setMyPlayerId(res.playerId);
         setMyNickname(nickname.trim());
         setClues([]); // Limpiar pistas al unirse

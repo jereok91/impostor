@@ -19,6 +19,8 @@ type GameInfo = {
   totalRounds?: number;
   config?: GameConfig;
   showHintToImpostor?: boolean;
+  createdAt?: string; // ISO date string
+  timeoutDuration?: number; // en milisegundos
 };
 
 type CardData = {

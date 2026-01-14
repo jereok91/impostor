@@ -8,6 +8,7 @@ import { useToast } from "../lib/useToast";
 import PlayerCard from "./PlayerCard";
 import LeaveGameButton from "./LeaveGameButton";
 import GameSettingsForm from "./GameSettingsForm";
+import RoomExpirationTimer from "./RoomExpirationTimer";
 
 export default function Lobby() {
   const router = useRouter();
@@ -49,7 +50,15 @@ export default function Lobby() {
     if (!socket || !nickname) return;
     socket.emit("create_room", { nickname, showHintToImpostor }, (res: any) => {
       if (res.ok) {
-        setGameInfo({ gameId: res.gameId, code: res.code, phase: "WAITING", round: 0, showHintToImpostor });
+        setGameInfo({ 
+          gameId: res.gameId, 
+          code: res.code, 
+          phase: "WAITING", 
+          round: 0, 
+          showHintToImpostor,
+          createdAt: res.createdAt,
+          timeoutDuration: res.timeoutDuration
+        });
         setMyPlayerId(res.playerId);
         setMyNickname(nickname);
         // Redirigir a la URL de la sala
@@ -64,7 +73,14 @@ export default function Lobby() {
     if (!socket || !nickname || !code) return;
     socket.emit("join_room", { code, nickname }, (res: any) => {
       if (res.ok) {
-        setGameInfo({ gameId: res.gameId, code: res.code, phase: "WAITING", round: 0 });
+        setGameInfo({ 
+          gameId: res.gameId, 
+          code: res.code, 
+          phase: "WAITING", 
+          round: 0,
+          createdAt: res.createdAt,
+          timeoutDuration: res.timeoutDuration
+        });
         setMyPlayerId(res.playerId);
         setMyNickname(nickname);
         // Redirigir a la URL de la sala
@@ -145,6 +161,14 @@ export default function Lobby() {
         <h1 className="text-3xl font-semibold">Impostor — Lobby</h1>
         {gameInfo.code && <LeaveGameButton variant="text" />}
       </div>
+
+      {/* Timer de expiración de sala */}
+      {gameInfo.code && gameInfo.createdAt && gameInfo.timeoutDuration && gameInfo.phase === "WAITING" && (
+        <RoomExpirationTimer 
+          roomCreatedAt={gameInfo.createdAt}
+          timeoutDuration={gameInfo.timeoutDuration}
+        />
+      )}
 
       {/* Mostrar código de sala y opciones de compartir */}
       {gameInfo.code && (

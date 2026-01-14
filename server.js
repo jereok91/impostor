@@ -173,7 +173,14 @@ app.prepare().then(() => {
         socket.data.playerId = player.id;
         socket.data.gameId = game.id;
 
-        safe.success({ gameId: game.id, code, playerId: player.id, config: gm.getConfig() });
+        safe.success({ 
+          gameId: game.id, 
+          code, 
+          playerId: player.id, 
+          config: gm.getConfig(),
+          createdAt: game.createdAt.toISOString(),
+          timeoutDuration: LOBBY_TIMEOUT_MS
+        });
         io.to(game.id).emit('room_update', { 
           gameId: game.id, 
           players: [{ id: player.id, nickname, isHost: true }],
@@ -236,7 +243,13 @@ app.prepare().then(() => {
           select: { id: true, nickname: true, isHost: true, score: true }
         });
 
-        safe.success({ gameId: game.id, code: game.code, playerId: player.id });
+        safe.success({ 
+          gameId: game.id, 
+          code: game.code, 
+          playerId: player.id,
+          createdAt: game.createdAt.toISOString(),
+          timeoutDuration: LOBBY_TIMEOUT_MS
+        });
         io.to(game.id).emit('room_update', { gameId: game.id, players: allPlayers });
       } catch (err) {
         safe.error(err, 'Error al unirse a la sala. Intenta de nuevo.');
@@ -329,7 +342,9 @@ app.prepare().then(() => {
           config: config,
           players: allPlayers,
           card: card, // Incluir la carta si existe
-          clues: cluesList // Incluir las pistas enviadas
+          clues: cluesList, // Incluir las pistas enviadas
+          createdAt: game.createdAt.toISOString(),
+          timeoutDuration: LOBBY_TIMEOUT_MS
         });
 
         // Notificar a todos que el jugador se reconectó
